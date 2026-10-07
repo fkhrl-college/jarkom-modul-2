@@ -574,4 +574,9 @@ put your answer here (or additionally screenshot)
    docker system prune
    ```
 
+<br />
+
+2. Running script in `init.sh` cannot be stopped and always turn off the node. Solution: Restart by `configure > reset` and make sure to not run any foreground process anymore in init.sh.
+
+<br />
 AJK
