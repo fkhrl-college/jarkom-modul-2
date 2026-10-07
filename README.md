@@ -1,7 +1,6 @@
 | Name                 | NRP        | Kelas |
 | -------------------- | ---------- | ----- |
 | Ahmad Fakhrul Bawani | 5025251143 | B051  |
-|                      |            |       |
 
 > [!IMPORTANT]
 > Remember to use the IP prefix allocation provided earlier for this pre-lab assignment (pra-praktikan) and for future ones.
@@ -258,6 +257,138 @@ iface eth0 inet dhcp
 ```
 
 2. Coba buka browser dan pergi ke `http://10.127.200.11`.
+
+**Chernobog (DNS Server)**
+
+1. Ambil netics-server dan set config seperti ini:
+
+```bash
+auto eth0
+iface eth0 inet static
+	address 10.127.200.12
+	netmask 255.255.255.0
+	gateway 10.127.200.1
+```
+
+2. Buat direktori untuk workspace dns:
+
+```bash
+mkdir -p /root/dns
+mkdir -p /root/dnsdata
+```
+
+3. Install bind seperti ini:
+
+```bash
+echo "nameserver 8.8.8.8" > /etc/resolv.conf
+apk update
+apk add bind
+```
+
+4. Buat file configurasi domain name di `/root/dns/named.conf`:
+
+```conf
+options {
+    directory "/root/dns";
+    listen-on {
+        any;
+    };
+    allow-query {
+        any;
+    };
+};
+
+logging {
+    channel default_log {
+        file "/root/dns/named.log" versions 3 size 5m;
+        severity info;
+        print-time yes;
+        print-severity yes;
+        print-category yes;
+    };
+    category default {
+        default_log;
+    };
+    category queries {
+        default_log;
+    };
+};
+
+zone "localhost" {
+    type master;
+    file "db.localhost";
+};
+
+zone "netics.my.id" {
+    type master;
+    file "db.netics.my.id";
+};
+```
+
+- Check file, seharusnya tidak return apa-apa, dengan:
+
+  ```
+  named-checkconf /path/ke/named.conf
+  ```
+
+5. Buat file database yang memetakan domain namenya:
+
+- File `/root/dns/db.localhost`:
+
+```bash
+STTL 86400
+@ IN SOA localhost. root.localhost. (
+    1       ; serial
+    3600    ; refresh
+    1800    ; retry
+    604800  ; expire
+    86400)  ; minimum
+
+IN NS localhost.
+IN A 127.0.0.1
+```
+
+- File `/root/dns/db.netics.my.id`:
+
+```bash
+STTL 864
+@ IN SOA ns1.netics.my.id admin.netics.my.id (
+    1       ; serial
+    3600    ; refresh
+    1800    ; retry
+    604800  ; expire
+    8400)   ; minimum
+
+ns1 IN A 10.127.200.12
+www IN A 10.127.200.11
+```
+
+6. Buat script untuk menjalankan dnsnya di `/root/dns/start_dns.sh`:
+
+```bash
+#!/bin/sh
+named -g -c /root/dns/named.conf
+```
+
+7. Tambahkan juga script agar dns langsung jalan di `/root/init.sh`:
+
+```bash
+#!/bin/sh
+chmod +x /root/dns/start_dns.sh
+/root/dns/start_dns.sh
+```
+
+8. Buka dhcp server yaitu Aegir dan edit file `/etc/dhcpd.conf` nya:
+
+```
+option dns 10.127.200.12 8.8.8.8
+```
+
+9. Di setiap node client, edit file `/etc/resolv.conf` dan tambahkan:
+
+```bash
+nameserver 10.127.200.12
+```
 
 #### Soal 2
 
