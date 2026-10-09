@@ -83,7 +83,17 @@ iptables -t nat -A POSTROUTING -s 10.127.0.0/16 -o eth0 -j MASQUERADE
 2. Hubungkan switch 1-switch 2 dengan interface eth1-eth0
 3. Hubungkan switch 1-Kazdel dengan interface eth2-eth0
 4. Hubungkan switch 1-Aegir dengan interface eth3-eth0
-5. Hubungkan switch 2-Sargon, Iberia, Higashi, Ognisko bertuturut-turut dengan interface eth1-eth0, eth2-eth0, eth3-eth0, eth4-eth0
+5. Hubungkan switch 1-Chernobog dengan interface eth4-eth0
+6. Hubungkan switch 2-Sargon, Iberia, Higashi, Ognisko bertuturut-turut dengan interface eth1-eth0, eth2-eth0, eth3-eth0, eth4-eth0
+7. Hubungkan switch 1-switch 3 dengan interface eth5-eth0
+8. Hbungkan switch 3-Web1 dengan interface eth1-eth0
+9. Hubungkan switch 3-Web2 dengan interface eth2-eth0
+
+<div align="center">
+    <img src="./docs/topologi-soal-1.png" width="600px">
+    <br />
+    <p>Gambaran topologinya</p>
+</div>
 
 **Aegir (DHCP Server)**
 
@@ -140,6 +150,15 @@ udhcpd -f /etc/dhcpd.conf > /var/log/dhcpd.log 2>&1 &
 echo "File log udhcp disimpan di /var/log/dhcpd.log"
 echo "Setup selesai"
 ```
+
+<div align="center">
+    <img src="./docs/1-dhcp-test/Higashi.png" width="600px"><br />
+    <img src="./docs/1-dhcp-test/Iberia.png" width="600px"><br />
+    <img src="./docs/1-dhcp-test/Ognisko.png" width="600px"><br />
+    <img src="./docs/1-dhcp-test/Sargon.png" width="600px">
+    <br />
+    <p>Gambaran node client di subnet 10.127.200.0/24 mendapatkan dynamic IP DHCP</p>
+</div>
 
 **Kazdel HTTP Server**
 
@@ -250,6 +269,13 @@ iface eth0 inet dhcp
 ```
 
 2. Coba buka browser dan pergi ke `http://10.127.200.11`.
+
+<div align="center">
+    <img src="./docs/1-10.127.200.11/net-desk.png" width="600px"><br />
+    <img src="./docs/1-10.127.200.11/net-pc.png" width="600px">
+    <br />
+    <p>Gambaran netics-pc dan netics-pc-desktop dapat mengakses 10.127.200.11</p>
+</div>
 
 **Chernobog (DNS Server)**
 
@@ -385,6 +411,13 @@ echo "option dns 10.127.200.12 8.8.8.8" >> /etc/dhcpd.conf
 udhcpd -f /etc/dhcpd.conf > /var/log/dhcpd.log 2>&1 &
 EOF
 ```
+
+<div align="center">
+    <img src="./docs/1-www.netics.my.id/net-pc.png" width="600px"><br />
+    <img src="./docs/1-www.netics.my.id/net-desk.png" width="600px">
+    <br />
+    <p>Gambaran semua node subnet 10.127.200.0/24 dapat akses ke www.netics.my.id</p>
+</div>
 
 4. Memperluas domain name dengan multizone, caranya edit `/root/init.sh`.
 
@@ -648,6 +681,13 @@ nginx -c /root/myconfig/nginx.conf
 ```
 
 2. Restart nodenya.
+
+<div align="center">
+    <img src="./docs/1-web.netics.org/net-pc.png" width="600px"><br />
+    <img src="./docs/1-web.netics.org/net-desk.png" width="600px">
+    <br />
+    <p>Gambaran semua node subnet 10.127.200.0/24 dapat akses ke web.netics.org</p>
+</div>
 
 **Reverse Proxy**
 
@@ -954,6 +994,18 @@ nginx -c /root/myconfig/nginx.conf
 ```
 
 2. Restart nodenya.
+
+<div align="center">
+    <img src="./docs/1-reverse-proxy-web/web1/net-pc.png" width="600px"><br />
+    <img src="./docs/1-reverse-proxy-web/web1/net-desk.png" width="600px">
+    <br />
+    <p>Gambaran semua node subnet 10.127.200.0/24 dapat akses ke www.netics.my.id/Web1</p>
+    <br />
+    <img src="./docs/1-reverse-proxy-web/web2/net-pc.png" width="600px"><br />
+    <img src="./docs/1-reverse-proxy-web/web2/net-desk.png" width="600px">
+    <br />
+    <p>Gambaran semua node subnet 10.127.200.0/24 dapat akses ke www.netics.my.id/Web2</p>
+</div>
 
 **Calendar App pada Web2**
 
@@ -1330,6 +1382,13 @@ nginx -c /root/myconfig/nginx.conf
 ```
 
 2. Restart nodenya.
+
+<div align="center">
+    <img src="./docs/1-reverse-proxy-app/net-pc.png" width="600px"><br />
+    <img src="./docs/1-reverse-proxy-app/net-desk.png" width="600px">
+    <br />
+    <p>Gambaran semua node subnet 10.127.200.0/24 dapat akses ke www.netics.my.id/app</p>
+</div>
 
 #### Soal 2
 
