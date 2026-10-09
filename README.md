@@ -47,7 +47,7 @@
 auto eth0
 iface eth0 inet dhcp
 
-# set static ip pada eth0 Router
+# set static ip pada eth1 Router untuk client lainnya
 auto eth1
 iface eth1 inet static
 	address 10.127.200.1
@@ -100,57 +100,46 @@ iface eth0 inet static
 	gateway 10.127.200.1 # alamat ip gerbang keluar dari local subnet, yaitu alamat IP Router karena Router lah yang terhubung ke NAT.
 ```
 
-2. Nyalakan dan atur DNS-nya yg ada di `/etc/resolv.conf` menggunakan Google Public DNS `8.8.8.8` atau `8.8.4.4`. Kita gunakan `8.8.8.8` seperti ini:
+2. Konfigurasi otomatis untuk udhcpd di `/root/init.sh`:
 
 ```bash
+#!/bin/sh
+set -e
+
+echo
+echo "Menjalankan setup Aegir otomatis..."
+echo
+
+echo
+echo "Step-1: tambah google public dns"
+echo
+
 echo "nameserver 8.8.8.8" > /etc/resolv.conf
+
+echo
+echo "Step-2: menulis konfigurasi udhcpd di /etc/dhcpd.conf"
+echo
+
+touch /etc/dhcpd.leases
+cat << 'EOF' > /etc/dhcpd.conf
+start 10.127.200.100
+end 10.127.200.150
+max_leases 50
+pidfile /etc/dhcpd.pid
+lease_file /etc/dhcpd.leases
+option subnet 255.255.255.0
+option router 10.127.200.1
+EOF
+
+echo
+echo "Step-3: Jalankan dhcp server di background"
+echo
+
+udhcpd -f /etc/dhcpd.conf > /var/log/dhcpd.log 2>&1 &
+
+echo "File log udhcp disimpan di /var/log/dhcpd.log"
+echo "Setup selesai"
 ```
-
-3. Install kea-dhcp4 sebagai dhcp server seperti ini:
-
-```bash
-apk update
-apk add kea-dhcp4
-
-# cek versi terinstall
-kea-dhcp4 -V
-```
-
-4. Konfigurasikan dhcp server di `/etc/kea/kea-dhcp4.conf` seperti berikut ini (di nano, alt+A untuk block tulisan, ctrl + k untuk delete):
-
-```conf
-{
-  "Dhcp4": {
-    "interfaces-config": {
-      "interfaces": ["eth0"]
-    },
-    "lease-database": {
-      "type": "memfile",
-      "persist": true,
-      "name": "/var/lib/kea/kea-leases4.csv"
-    },
-    "valid-lifetime": 600,
-    "max-valid-lifetime": 7200,
-    "subnet4": [
-      {
-        "id": 1,
-        "subnet": "10.127.200.0/24", # subnet di 10.127.200.0 dengan netmask 24 bit. oktet akhir .0 sebagai nama subnet
-        "pools": [
-          { "pool": "10.127.200.100 - 10.127.200.150" } # ip address range dhcp. Hanya dari 10.127.200.1 sd. 10.127.200.254 karena .0 digunakan sebagai nama subnet dan .255 sebagai broadcast.
-        ],
-        "option-data": [
-          { "name": "routers", "data": "10.127.200.1" } # set router Ip sebagai 10.127.200.1
-        ]
-      }
-    ]
-  }
-}
-```
-
-- Tes syntax dulu, seharusnya tidak return apa-apa:
-  ```bash
-  kea-dhcp4 -t /etc/kea/kea-dhcp4.conf 2>&1 | grep -i -A 3 "error"
-  ```
 
 **Kazdel HTTP Server**
 
@@ -164,25 +153,38 @@ iface eth0 inet static
 	gateway 10.127.200.1
 ```
 
-2. Tambah Google public DNS dan install nginx:
+2. Tulis skrip setup otomatis di `/root/init.sh`:
 
 ```bash
+#!/bin/sh
+
+set -e
+
+echo
+echo "Menjalankan setup Kazdel otomatis..."
+echo
+
+echo "Step-1: tambah google public dns agar request client ke internet bisa diterjemahkan google"
+echo
+
 echo "nameserver 8.8.8.8" > /etc/resolv.conf
+
+echo "Step-2: install nginx"
+echo
 apk update
 apk add nginx
-```
 
-3. Buat struktur direktori nginx workspace:
-
-```bash
+echo
+echo "Step-3: setup workspace directory untuk nginx kita"
+echo
 mkdir -p /root/myconfig
 mkdir -p /root/myweb
 mkdir -p /root/mylogs
-```
 
-4. Buat simple html di `/root/myweb/index.html`:
+echo "Step-4: tulis /root/myweb/index.html sederhana"
+echo
 
-```html
+cat << 'EOF' > /root/myweb/index.html
 <html>
   <head>
     <title>This is my Web in Kazdel</title>
@@ -191,11 +193,12 @@ mkdir -p /root/mylogs
     <h1>This is my Web in Kazdel</h1>
   </body>
 </html>
-```
+EOF
 
-5. Buat configurasi nginx di `/root/myconfig/nginx.conf`:
+echo "Step-5: menulis konfigurasi nginx di /root/myconfig/nginx.conf"
+echo
 
-```conf
+cat << 'EOF' > /root/myconfig/nginx.conf
 user root;
 worker_processes auto;
 worker_cpu_affinity auto;
@@ -217,20 +220,10 @@ http {
         }
     }
 }
-```
-
-- Tes syntax dulu, seharusnya return `...is ok` dan `...is successful`:
-  ```bash
-  nginx -tc /root/myconfig/nginx.conf
-  ```
-
-6. Buat `/root/init.sh` agar nginx otomatis berjalan saat pertama menyala:
-
-```bash
+EOF
+echo "Step-6: jalankan nginx"
 nginx -c /root/myconfig/nginx.conf
 ```
-
-7. Cek dengan membuka VNC pada Ognisko dan curl pada Sargon, Iberia, Higashi.
 
 **Sargon, Iberia, Higashi**
 
@@ -270,24 +263,30 @@ iface eth0 inet static
 	gateway 10.127.200.1
 ```
 
-2. Buat direktori untuk workspace dns:
+2. Tulis skrip setup otomatis:
 
 ```bash
+#!/bin/sh
+
+set -e
+
+echo "Menjalankan setup Chernobog otomatis..."
+echo
+
+echo "Step-1: membuat workspace directory untuk dns di /root/dns dan /root/dnsdata"
+echo
+
 mkdir -p /root/dns
 mkdir -p /root/dnsdata
-```
 
-3. Install bind seperti ini:
-
-```bash
+echo "Step-3: tambah google public dns untuk akses internet lalu install bind"
+echo
 echo "nameserver 8.8.8.8" > /etc/resolv.conf
 apk update
 apk add bind
-```
 
-4. Buat file configurasi domain name di `/root/dns/named.conf`:
-
-```conf
+echo "Step-4: tulis konfigurasi domain name di /root/dns/named.conf"
+cat << 'EOF' > /root/dns/named.conf
 options {
     directory "/root/dns";
     listen-on {
@@ -323,72 +322,1014 @@ zone "netics.my.id" {
     type master;
     file "db.netics.my.id";
 };
-```
+EOF
 
-- Check file, seharusnya tidak return apa-apa, dengan:
-
-  ```
-  named-checkconf /path/ke/named.conf
-  ```
-
-5. Buat file database yang memetakan domain namenya:
-
-- File `/root/dns/db.localhost`:
-
-```bash
-STTL 86400
+echo
+echo "Step-5: tulis tabel yang memetakan konfigurasi nama domain"
+echo "Menulis /root/dns/db.localhost"
+cat << 'EOF' > /root/dns/db.localhost
+$TTL 86400
 @ IN SOA localhost. root.localhost. (
-    1       ; serial
-    3600    ; refresh
-    1800    ; retry
-    604800  ; expire
-    86400)  ; minimum
+    1
+    3600
+    1800
+    604800
+    86400)
 
-IN NS localhost.
-IN A 127.0.0.1
-```
+@ IN NS localhost.
+@ IN A  127.0.0.1
+EOF
 
-- File `/root/dns/db.netics.my.id`:
-
-```bash
-STTL 864
+echo "Menulis /root/dns/db.netics.my.id"
+cat << 'EOF' > /root/dns/db.netics.my.id
+$TTL 86400
 @ IN SOA ns1.netics.my.id admin.netics.my.id (
-    1       ; serial
-    3600    ; refresh
-    1800    ; retry
-    604800  ; expire
-    8400)   ; minimum
+    1
+    3600
+    1800
+    604800
+    8400)
 
-ns1 IN A 10.127.200.12
-www IN A 10.127.200.11
-```
+@   IN  NS  ns1.netics.my.id.
+ns1 IN  A   10.127.200.12
+www IN  A   10.127.200.11
+EOF
 
-6. Buat script untuk menjalankan dnsnya di `/root/dns/start_dns.sh`:
-
-```bash
+echo
+echo "Step-6: buat script starter dns server di /root/dns/start_dns.sh"
+cat << 'EOF' > /root/dns/start_dns.sh
 #!/bin/sh
-named -g -c /root/dns/named.conf
-```
+nohup named -g -c /root/dns/named.conf > /var/log/named.log 2>&1 &
+EOF
 
-7. Tambahkan juga script agar dns langsung jalan di `/root/init.sh`:
-
-```bash
-#!/bin/sh
+echo
+echo "Step-7: jalankan server dnsnya"
 chmod +x /root/dns/start_dns.sh
 /root/dns/start_dns.sh
+
+echo "Log file bisa dilihat di /var/log/named.log"
 ```
 
-8. Buka dhcp server yaitu Aegir dan edit file `/etc/dhcpd.conf` nya:
-
-```
-option dns 10.127.200.12 8.8.8.8
-```
-
-9. Di setiap node client, edit file `/etc/resolv.conf` dan tambahkan:
+3. Buka dhcp server yaitu Aegir dan edit file `/etc/dhcpd.conf` nya:
 
 ```bash
-nameserver 10.127.200.12
+# remember this is in Aegir, not Chernobog
+cat << 'EOF' >> /root/init.sh
+echo "Step-4: tambahkan konfigurasi dns ke /etc/udhcpd.conf"
+# matikan udhcpd lama
+killall udhcpd 2>/dev/null || true
+
+# tambahkan konfigurasi
+echo "option dns 10.127.200.12 8.8.8.8" >> /etc/dhcpd.conf
+# nyalakan kembali
+udhcpd -f /etc/dhcpd.conf > /var/log/dhcpd.log 2>&1 &
+EOF
 ```
+
+4. Memperluas domain name dengan multizone, caranya edit `/root/init.sh`.
+
+```bash
+#!/bin/sh
+
+set -e
+
+echo "Menjalankan setup Chernobog otomatis..."
+echo
+
+echo "Step-1: membuat workspace directory untuk dns di /root/dns dan /root/dnsdata"
+echo
+
+mkdir -p /root/dns
+mkdir -p /root/dnsdata
+
+echo "Step-3: tambah google public dns untuk akses internet lalu install bind"
+echo
+echo "nameserver 8.8.8.8" > /etc/resolv.conf
+apk update
+apk add bind
+
+echo "Step-4: tulis konfigurasi domain name di /root/dns/named.conf"
+cat << 'EOF' > /root/dns/named.conf
+options {
+    directory "/root/dns";
+    listen-on {
+        any;
+    };
+    allow-query {
+        any;
+    };
+};
+
+logging {
+    channel default_log {
+        file "/root/dns/named.log" versions 3 size 5m;
+        severity info;
+        print-time yes;
+        print-severity yes;
+        print-category yes;
+    };
+    category default {
+        default_log;
+    };
+    category queries {
+        default_log;
+    };
+};
+
+zone "localhost" {
+    type master;
+    file "db.localhost";
+};
+
+zone "netics.my.id" {
+    type master;
+    file "db.netics.my.id";
+};
+EOF
+
+echo
+echo "Step-5: tulis tabel yang memetakan konfigurasi nama domain"
+echo "Menulis /root/dns/db.localhost"
+cat << 'EOF' > /root/dns/db.localhost
+$TTL 86400
+@ IN SOA localhost. root.localhost. (
+    1
+    3600
+    1800
+    604800
+    86400)
+
+@ IN NS localhost.
+@ IN A  127.0.0.1
+EOF
+
+echo "Menulis /root/dns/db.netics.my.id"
+cat << 'EOF' > /root/dns/db.netics.my.id
+$TTL 86400
+@ IN SOA ns1.netics.my.id admin.netics.my.id (
+    1
+    3600
+    1800
+    604800
+    8400)
+
+@   IN  NS  ns1.netics.my.id.
+ns1 IN  A   10.127.200.12
+www IN  A   10.127.200.11
+EOF
+
+echo "Menambahkan netics.org"
+echo "Step-5.1: append zone baru netics.org di /root/dns/named.conf"
+echo
+cat << 'EOF' >> /root/dns/named.conf
+zone "netics.org" {
+    type master;
+    file "db.netics.org";
+};
+EOF
+
+echo "Step-5.2: tulis db.netics.org"
+echo
+cat << 'EOF' > /root/dns/db.netics.org
+$TTL 86400
+@ IN SOA ns1.netics.org. admin.netics.org. (
+    1
+    3600
+    1800
+    604800
+    86400)
+
+@   IN NS   ns1.netics.org.
+ns1 IN A    10.127.200.12
+web IN A    10.127.200.11
+EOF
+
+echo
+echo "Step-6: buat script starter dns server di /root/dns/start_dns.sh"
+cat << 'EOF' > /root/dns/start_dns.sh
+#!/bin/sh
+nohup named -g -c /root/dns/named.conf > /var/log/named.log 2>&1 &
+EOF
+
+echo
+echo "Step-7: jalankan server dnsnya"
+chmod +x /root/dns/start_dns.sh
+/root/dns/start_dns.sh
+
+echo "Log file bisa dilihat di /var/log/named.log"
+```
+
+**Kazdel Establish Netics.org**
+
+1. Edit `/root/init.sh` sehingga nginx meladeni web.netics.org
+
+```bash
+#!/bin/sh
+
+set -e
+
+echo
+echo "Menjalankan setup Kazdel otomatis..."
+echo
+
+echo "Step-1: tambah google public dns agar request client ke internet bisa diterjemahkan google"
+echo
+
+echo "nameserver 8.8.8.8" > /etc/resolv.conf
+
+echo "Step-2: install nginx"
+echo
+apk update
+apk add nginx
+
+echo
+echo "Step-3: setup workspace directory untuk nginx kita"
+echo
+mkdir -p /root/myconfig
+mkdir -p /root/myweb
+mkdir -p /root/mylogs
+
+echo "Step-4: tulis /root/myweb/index.html sederhana"
+echo
+
+cat << 'EOF' > /root/myweb/index.html
+<html>
+  <head>
+    <title>This is my Web in Kazdel</title>
+  </head>
+  <body>
+    <h1>This is my Web in Kazdel</h1>
+  </body>
+</html>
+EOF
+
+echo "Step-5: menulis konfigurasi nginx di /root/myconfig/nginx.conf"
+echo
+
+cat << 'EOF' > /root/myconfig/nginx.conf
+user root;
+worker_processes auto;
+worker_cpu_affinity auto;
+pid /tmp/nginx.pid;
+error_log /root/mylogs/error.log;
+
+events {
+    worker_connections 768;
+}
+
+http {
+    server {
+        listen 80;
+        server_name _;
+        root /root/myweb;
+        index index.html;
+        location / {
+            try_files $uri $uri/ =404;
+        }
+    }
+}
+EOF
+
+echo "Establish netic.org..."
+echo
+
+echo "Step-5.1: menambahkan web /root/myweb-netics-org"
+echo
+
+mkdir -p /root/myweb-netics-org
+cat << 'EOF' > /root/myweb-netics-org/index.html
+<html>
+  <head>
+    <title>netics.org</title>
+  </head>
+  <body>
+    <h1>This is my NETICS-ORG</h1>
+  </body>
+</html>
+EOF
+
+echo "Step-5.2: mengedit nginx.conf"
+echo
+cat << 'EOF' > /root/myconfig/nginx.conf
+user root;
+worker_processes auto;
+worker_cpu_affinity auto;
+pid /tmp/nginx.pid;
+error_log /root/mylogs/error.log;
+
+events {
+    worker_connections 768;
+}
+
+http {
+    server {
+        listen 80;
+        server_name www.netics.my.id;
+        root /root/myweb;
+        index index.html;
+        location / {
+            try_files $uri $uri/ =404;
+        }
+    }
+    server {
+        listen 80;
+        server_name web.netics.org;
+        root /root/myweb-netics-org;
+        index index.html;
+        location / {
+            try_files $uri $uri/ =404;
+        }
+    }
+}
+EOF
+
+echo "Step-6: jalankan nginx"
+nginx -c /root/myconfig/nginx.conf
+```
+
+2. Restart nodenya.
+
+**Reverse Proxy**
+
+**Web1**
+
+1. Setup ip-nya:
+
+```bash
+auto eth0
+iface eth0 inet static
+    address 10.127.200.20
+    netmask 255.255.255.0
+    gateway 10.127.200.1
+```
+
+2. Setup script otomatis di `/root/init.sh`
+
+```bash
+#!/bin/sh
+
+set -e
+
+echo "Menjalankan setup otomatis..."
+echo
+
+echo "Step-1: install nginx"
+echo
+echo "nameserver 8.8.8.8" > /etc/resolv.conf
+apk update
+apk add nginx
+
+echo "Step-2: membuat workspace nginx"
+echo
+
+mkdir -p /root/myconfig
+mkdir -p /root/myweb
+mkdir -p /root/mylogs
+
+echo "Step-3: menulis konfigurasi nginx di /root/myconfig/nginx.conf"
+echo
+
+cat << 'EOF' > /root/myconfig/nginx.conf
+user root;
+worker_processes auto;
+worker_cpu_affinity auto;
+pid /tmp/nginx.pid;
+error_log /root/mylogs/error.log;
+
+events {
+    worker_connections 768;
+}
+
+http {
+    server {
+        listen 8080;
+        server_name _;
+        root /root/myweb;
+        index index.html;
+        location / {
+            try_files $uri $uri/ =404;
+        }
+    }
+}
+EOF
+
+echo "Step-4: membuat web sederhana..."
+echo
+
+cat << 'EOF' > /root/myweb/index.html
+<html>
+  <head>
+    <title>This is my web 1</title>
+  </head>
+  <body>
+    <h1>Ini WEB-1</h1>
+  </body>
+</html>
+EOF
+
+echo "Step-5: jalankan nginx"
+nginx -c /root/myconfig/nginx.conf
+```
+
+3. Restart nodenya.
+
+**Web2**
+
+1. Setup ip-nya:
+
+```bash
+auto eth0
+iface eth0 inet static
+    address 10.127.200.21
+    netmask 255.255.255.0
+    gateway 10.127.200.1
+```
+
+2. Setup script otomatis di `/root/init.sh`
+
+```bash
+#!/bin/sh
+
+set -e
+
+echo "Menjalankan setup otomatis..."
+echo
+
+echo "Step-1: install nginx"
+echo
+echo "nameserver 8.8.8.8" > /etc/resolv.conf
+apk update
+apk add nginx
+
+echo "Step-2: membuat workspace nginx"
+echo
+
+mkdir -p /root/myconfig
+mkdir -p /root/myweb
+mkdir -p /root/mylogs
+
+echo "Step-3: menulis konfigurasi nginx di /root/myconfig/nginx.conf"
+echo
+
+cat << 'EOF' > /root/myconfig/nginx.conf
+user root;
+worker_processes auto;
+worker_cpu_affinity auto;
+pid /tmp/nginx.pid;
+error_log /root/mylogs/error.log;
+
+events {
+    worker_connections 768;
+}
+
+http {
+    server {
+        listen 8080;
+        server_name _;
+        root /root/myweb;
+        index index.html;
+        location / {
+            try_files $uri $uri/ =404;
+        }
+    }
+}
+EOF
+
+echo "Step-4: membuat web sederhana..."
+echo
+
+cat << 'EOF' > /root/myweb/index.html
+<html>
+  <head>
+    <title>This is my web 2</title>
+  </head>
+  <body>
+    <h1>Ini WEB-2</h1>
+  </body>
+</html>
+EOF
+
+echo "Step-5: jalankan nginx"
+nginx -c /root/myconfig/nginx.conf
+```
+
+3. Restart nodenya.
+
+**Kazdel Reverse Proxy**
+
+1. Edit `/root/init.sh` menjadi seperti ini:
+
+```bash
+#!/bin/sh
+
+set -e
+
+echo
+echo "Menjalankan setup Kazdel otomatis..."
+echo
+
+echo "Step-1: tambah google public dns agar request client ke internet bisa diterjemahkan google"
+echo
+
+echo "nameserver 8.8.8.8" > /etc/resolv.conf
+
+echo "Step-2: install nginx"
+echo
+apk update
+apk add nginx
+
+echo
+echo "Step-3: setup workspace directory untuk nginx kita"
+echo
+mkdir -p /root/myconfig
+mkdir -p /root/myweb
+mkdir -p /root/mylogs
+
+echo "Step-4: tulis /root/myweb/index.html sederhana"
+echo
+
+cat << 'EOF' > /root/myweb/index.html
+<html>
+  <head>
+    <title>This is my Web in Kazdel</title>
+  </head>
+  <body>
+    <h1>This is my Web in Kazdel</h1>
+  </body>
+</html>
+EOF
+
+echo "Step-5: menulis konfigurasi nginx di /root/myconfig/nginx.conf"
+echo
+
+cat << 'EOF' > /root/myconfig/nginx.conf
+user root;
+worker_processes auto;
+worker_cpu_affinity auto;
+pid /tmp/nginx.pid;
+error_log /root/mylogs/error.log;
+
+events {
+    worker_connections 768;
+}
+
+http {
+    server {
+        listen 80;
+        server_name _;
+        root /root/myweb;
+        index index.html;
+        location / {
+            try_files $uri $uri/ =404;
+        }
+    }
+}
+EOF
+
+echo "Establish netic.org..."
+echo
+
+echo "Step-5.1: menambahkan web /root/myweb-netics-org"
+echo
+
+mkdir -p /root/myweb-netics-org
+cat << 'EOF' > /root/myweb-netics-org/index.html
+<html>
+  <head>
+    <title>netics.org</title>
+  </head>
+  <body>
+    <h1>This is my NETICS-ORG</h1>
+  </body>
+</html>
+EOF
+
+echo "Step-5.2: mengedit nginx.conf"
+echo
+cat << 'EOF' > /root/myconfig/nginx.conf
+user root;
+worker_processes auto;
+worker_cpu_affinity auto;
+pid /tmp/nginx.pid;
+error_log /root/mylogs/error.log;
+
+events {
+    worker_connections 768;
+}
+
+http {
+    server {
+        listen 80;
+        server_name www.netics.my.id;
+        root /root/myweb;
+        index index.html;
+        location / {
+            try_files $uri $uri/ =404;
+        }
+        location = /Web1 {
+            proxy_pass http://10.127.200.20:8080/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+        }
+        location = /Web2 {
+            proxy_pass http://10.127.200.21:8080/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+        }
+    }
+    server {
+        listen 80;
+        server_name web.netics.org;
+        root /root/myweb-netics-org;
+        index index.html;
+        location / {
+            try_files $uri $uri/ =404;
+        }
+    }
+}
+EOF
+
+echo "Step-6: jalankan nginx"
+nginx -c /root/myconfig/nginx.conf
+```
+
+2. Restart nodenya.
+
+**Calendar App pada Web2**
+
+1. Tambahkan script `/root/calendar-app.init.sh` untuk generate calendar app. Jalankan sekali saja
+
+```bash
+#!/bin/sh
+
+set -e
+
+echo "Melakukan generate calendar app otomatis..."
+echo
+
+echo "Step-1: install python3"
+echo
+echo "nameserver 8.8.8.8" > /etc/resolv.conf
+apk update
+apk add python3
+
+echo
+echo "Step-2: generate app..."
+echo
+
+mkdir -p /root/aplikasi
+cat << 'EOF' > /root/aplikasi/program.py
+import calendar
+from datetime import datetime
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+PORT = 5000
+
+class CalendarRequestHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        now = datetime.now()
+        year = now.year
+        month = now.month
+
+        cal = calendar.Calendar(firstweekday=6)
+        month_days = cal.monthdayscalendar(year, month)
+        month_name = calendar.month_name[month]
+
+        html = \
+        f"""
+        <!doctype html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>{month_name} {year} - Calendar</title>
+            <style>
+                body {{
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                    background-color: #f4f7f6;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    height: 100vh;
+                    margin: 0;
+                }}
+                .calendar-container {{
+                    background: #ffffff;
+                    padding: 24px;
+                    border-radius: 12px;
+                    box-shadow: 0 4px 20px rgba(0,0,0,0.8);
+                    width: 100%;
+                    max-width: 500px;
+                }}
+                h2 {{
+                    text-align: center;
+                    color: #2c3e50;
+                    margin-top: 0;
+                    margin-bottom: 20px;
+                }}
+                table {{
+                    width: 100%;
+                    border-collapse: collapse;
+                }}
+                th {{
+                    background-color: #3498db;
+                    color: white;
+                    font-weight: 600;
+                    padding: 12px 0;
+                    width: 14.28%;
+                    border-radius: 4px;
+                }}
+                td {{
+                    text-align: center;
+                    padding: 16px 0;
+                    color: #333;
+                    font-size: 16px;
+                    font-weight: 500;
+                }}
+                .today {{
+                    background-color: #e8f4fd;
+                    color: #3498db;
+                    border-radius: 50%;
+                    font-weight: bold;
+                }}
+                .empty {{
+                    color: #ccc;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="calendar-container">
+                <h2>{month_name} {year}</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Sun</th>
+                            <th>Mon</th>
+                            <th>Tue</th>
+                            <th>Wed</th>
+                            <th>Thu</th>
+                            <th>Fri</th>
+                            <th>Sat</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        """
+        for week in month_days:
+            html += f"<tr>"
+            for day in week:
+                if day == 0:
+                    html += f'<td class="empty">&bull;</td>'
+                elif day == now.day:
+                    html += f'<td class="today">{day}</td>'
+                else:
+                    html += f"<td>{day}</td>"
+            html += f"</tr>"
+        html += \
+        f"""
+                    </tbody>
+                </table>
+            </div>
+        </body>
+        </html>
+        """
+        self.send_response(200)
+        self.send_header("Content-type", "text/html")
+        self.end_headers()
+        self.wfile.write(html.encode("utf-8"))
+
+def run():
+    server_address = ("", PORT)
+    httpd = HTTPServer(server_address, CalendarRequestHandler)
+    print(f"Server running at http://localhost:{PORT}")
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("\nServer stopped.")
+
+if __name__ == "__main__":
+    run()
+EOF
+
+echo "Setup berhasil, harap nyalakan ulang..."
+```
+
+2. Edit `/root/init.sh` agar menjalankan dan meladeni aplikasi python.
+
+```bash
+#!/bin/sh
+
+set -e
+
+echo "Menjalankan setup otomatis..."
+echo
+
+echo "Step-1: install nginx"
+echo
+echo "nameserver 8.8.8.8" > /etc/resolv.conf
+apk update
+apk add nginx
+
+echo "Step-2: membuat workspace nginx"
+echo
+
+mkdir -p /root/myconfig
+mkdir -p /root/myweb
+mkdir -p /root/mylogs
+
+echo "Step-3: menulis konfigurasi nginx di /root/myconfig/nginx.conf"
+echo
+
+cat << 'EOF' > /root/myconfig/nginx.conf
+user root;
+worker_processes auto;
+worker_cpu_affinity auto;
+pid /tmp/nginx.pid;
+error_log /root/mylogs/error.log;
+
+events {
+    worker_connections 768;
+}
+
+http {
+    server {
+        listen 8080;
+        server_name _;
+        root /root/myweb;
+        index index.html;
+        location / {
+            try_files $uri $uri/ =404;
+        }
+    }
+}
+EOF
+
+echo "Step-4: membuat web sederhana..."
+echo
+
+cat << 'EOF' > /root/myweb/index.html
+<html>
+  <head>
+    <title>This is my web 2</title>
+  </head>
+  <body>
+    <h1>Ini WEB-2</h1>
+  </body>
+</html>
+EOF
+
+echo "Step-5.1: jalankan nginx"
+nginx -c /root/myconfig/nginx.conf
+
+echo "Step-5.2: Jalankan calendar app"
+python3 /root/aplikasi/program.py
+```
+
+3. Restart nodenya.
+
+**Kazdel Reverse Proxy Add /App Endpoint**
+
+1. Edit konfigurasi `/root/init.sh` agar meladeni endpoint `/app` seperti ini
+
+```bash
+#!/bin/sh
+
+set -e
+
+echo
+echo "Menjalankan setup Kazdel otomatis..."
+echo
+
+echo "Step-1: tambah google public dns agar request client ke internet bisa diterjemahkan google"
+echo
+
+echo "nameserver 8.8.8.8" > /etc/resolv.conf
+
+echo "Step-2: install nginx"
+echo
+apk update
+apk add nginx
+
+echo
+echo "Step-3: setup workspace directory untuk nginx kita"
+echo
+mkdir -p /root/myconfig
+mkdir -p /root/myweb
+mkdir -p /root/mylogs
+
+echo "Step-4: tulis /root/myweb/index.html sederhana"
+echo
+
+cat << 'EOF' > /root/myweb/index.html
+<html>
+  <head>
+    <title>This is my Web in Kazdel</title>
+  </head>
+  <body>
+    <h1>This is my Web in Kazdel</h1>
+  </body>
+</html>
+EOF
+
+echo "Step-5: menulis konfigurasi nginx di /root/myconfig/nginx.conf"
+echo
+
+cat << 'EOF' > /root/myconfig/nginx.conf
+user root;
+worker_processes auto;
+worker_cpu_affinity auto;
+pid /tmp/nginx.pid;
+error_log /root/mylogs/error.log;
+
+events {
+    worker_connections 768;
+}
+
+http {
+    server {
+        listen 80;
+        server_name _;
+        root /root/myweb;
+        index index.html;
+        location / {
+            try_files $uri $uri/ =404;
+        }
+    }
+}
+EOF
+
+echo "Establish netic.org..."
+echo
+
+echo "Step-5.1: menambahkan web /root/myweb-netics-org"
+echo
+
+mkdir -p /root/myweb-netics-org
+cat << 'EOF' > /root/myweb-netics-org/index.html
+<html>
+  <head>
+    <title>netics.org</title>
+  </head>
+  <body>
+    <h1>This is my NETICS-ORG</h1>
+  </body>
+</html>
+EOF
+
+echo "Step-5.2: mengedit nginx.conf"
+echo
+cat << 'EOF' > /root/myconfig/nginx.conf
+user root;
+worker_processes auto;
+worker_cpu_affinity auto;
+pid /tmp/nginx.pid;
+error_log /root/mylogs/error.log;
+
+events {
+    worker_connections 768;
+}
+
+http {
+    server {
+        listen 80;
+        server_name www.netics.my.id;
+        root /root/myweb;
+        index index.html;
+        location / {
+            try_files $uri $uri/ =404;
+        }
+        location = /Web1 {
+            proxy_pass http://10.127.200.20:8080/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+        }
+        location = /Web2 {
+            proxy_pass http://10.127.200.21:8080/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+        }
+        location = /app {
+            proxy_pass http://10.127.200.21:5000/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+        }
+    }
+    server {
+        listen 80;
+        server_name web.netics.org;
+        root /root/myweb-netics-org;
+        index index.html;
+        location / {
+            try_files $uri $uri/ =404;
+        }
+    }
+}
+EOF
+
+echo "Step-6: jalankan nginx"
+nginx -c /root/myconfig/nginx.conf
+```
+
+2. Restart nodenya.
 
 #### Soal 2
 
@@ -555,6 +1496,12 @@ put your answer here (and screenshot)
 ```
 put your answer here (or additionally screenshot)
 ```
+
+#### Kendala
+
+1. Concurrent install membuat salah satu node gagal install.
+
+![image](./docs/concurrent-install.png)
 
 #### Troubleshooting
 
