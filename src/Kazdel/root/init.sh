@@ -119,6 +119,11 @@ http {
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
         }
+        location = /Web3 {
+            proxy_pass http://10.127.200.22:8080/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+        }
     }
     server {
         listen 80;
@@ -127,6 +132,15 @@ http {
         index index.html;
         location / {
             try_files $uri $uri/ =404;
+        }
+    }
+    server {
+        listen 80;
+        server_name app.netics.my.id;
+        location / {
+            proxy_pass http://10.127.200.22:8080/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
         }
     }
 }

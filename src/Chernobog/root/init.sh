@@ -85,6 +85,7 @@ $TTL 86400
 @   IN  NS  ns1.netics.my.id.
 ns1 IN  A   10.127.200.12
 www IN  A   10.127.200.11
+app IN  A   10.127.200.11
 EOF
 
 echo "Menambahkan netics.org"
